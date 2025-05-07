@@ -1,0 +1,19 @@
+systemctl cat rebaca-poc.service
+# /etc/systemd/system/rebaca-poc.service
+[Unit]
+Description=SSH container for user abot
+After=network.target
+# Requires=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/podman start -a rebaca-poc
+ExecStop=/usr/bin/docker stop rebaca-poc
+
+[Install]
+WantedBy=multi-user.target
+
+
+-------
+sudo systemctl enable rebaca-poc.service
+Created symlink /etc/systemd/system/multi-user.target.wants/rebaca-poc.service → /etc/systemd/system/rebaca-poc.service.

@@ -1,0 +1,94 @@
+FROM quay.io/centos/centos:stream9 as ci-telco-runner
+
+ENV GOCACHE=/go/.cache \
+    GOARM=5 \
+    GOPATH=/go \
+    GOFLAGS='-mod=vendor' \
+    LOGNAME=deadbeef \
+    HOME=/output
+RUN dnf install -y procps-ng iproute openssh-server ansible-core python3 python3-pip python3-devel \
+        wget gcc make jq which iputils nmap-ncat vim && \
+    dnf remove ansible-core --noautoremove -y && \
+    dnf clean all && \
+    pip3 install --no-cache-dir "ansible==8.7.0" && \
+    wget https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable-4.18/openshift-client-linux.tar.gz && \
+    tar -zxvf openshift-client-linux.tar.gz && \
+    mv oc /usr/local/bin/ && \
+    mv kubectl /usr/local/bin/ && \
+    rm -f openshift-client-linux.tar.gz && \
+    mkdir /output && \
+    chmod -R g+rwx /output && \
+    mkdir -p $GOPATH/bin && \
+    chmod g+xw -R $GOPATH && \
+    chmod g+w /etc/passwd && \
+    echo 'echo default:x:$(id -u):$(id -g):Default Application User:/output:/sbin/nologin\ >> /etc/passwd' > /output/fix_uid.sh && \
+    chmod g+rwx /output/fix_uid.sh
+RUN for version in 1.24.3; do \
+    mkdir -p /usr/local/${version} && \
+    wget https://golang.org/dl/go${version}.linux-amd64.tar.gz && \
+    tar -C /usr/local/${version} -xzf go${version}.linux-amd64.tar.gz && \
+    chmod g+xw -R /usr/local/${version}/go && \
+    rm go${version}.linux-amd64.tar.gz && \
+    echo "export GOLANG_VERSION=${version}" > /output/golang-${version} && \
+    echo 'export GOROOT=/usr/local/${GOLANG_VERSION}/go' >> /output/golang-${version} && \
+    echo 'export PATH=$PATH:/usr/local/${GOLANG_VERSION}/go/bin:/go/bin' >> /output/golang-${version} && \
+    chmod g+rwx /output/golang-${version}; \
+    done
+RUN mkdir /var/run/sshd && \
+    ssh-keygen -A && \
+    sed -i 's/^#Port.*/Port 22044/' /etc/ssh/sshd_config && \
+    sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && \
+    sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+
+# FROM registry.redhat.io/openshift4/ztp-site-generate-rhel8:v4.15 AS ztp-gen
+# WORKDIR /home/ztp
+
+FROM quay.io/multi-arch/yq:4.35.2 as yq4
+
+FROM ci-telco-runner as ci-telco-runner-kcli
+RUN \
+    dnf update -y && \
+    dnf -y install dnf-plugins-core && \
+    dnf -y copr enable karmab/kcli && \
+    dnf -y install kcli httpd-tools rsync && \
+    dnf clean all && \
+    mkdir -pv /var/lib/libvirt/images && \
+    chmod 0777 /var/lib/libvirt/images && \
+    pip install pytest pytest-shell requests && \
+    curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && \
+    chmod 700 /tmp/get_helm.sh && \
+    /tmp/get_helm.sh && \
+    rm -f /tmp/get_helm.sh && \
+    echo ;
+
+FROM ci-telco-runner-kcli
+# WORKDIR /workdir
+ARG user=abot
+ENV HOME /home/${user}
+ENV GO_VER 1.24.3
+ENV SSH_PUBKEY "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAsLhaF1EBgsaVjj45s8mIY9HSRfDGiqabylCVriSiSV rebaca-poc"
+RUN \
+    useradd --home-dir ${HOME} ${user}
+USER ${user}
+# COPY --from=ztp-gen /home/ztp ${HOME}/ztp
+COPY --from=yq4 /usr/bin/yq /usr/bin/yq
+RUN \
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh)" --unattended ; \
+    sed -i 's/^OSH_THEME=.*/OSH_THEME="zork"/g' ~/.bashrc ; \
+    echo "export GOLANG_VERSION=${GO_VER}" >> ~/.bashrc ; \
+    echo "export GOROOT=/usr/local/${GO_VER}/go" >> ~/.bashrc ; \
+    echo "export PATH=$PATH:/usr/local/${GO_VER}/go/bin:/go/bin" >> ~/.bashrc ; \
+    echo "------------------------------------------------------------------------------------" ;
+RUN \
+    mkdir -pv ${HOME}/.ssh && \
+    echo "${SSH_PUBKEY}" > ${HOME}/.ssh/authorized_keys && \
+    chmod 700 ${HOME}/.ssh && \
+    chmod 600 ${HOME}/.ssh/authorized_keys && \
+    chown -R ${user}:${user} ${HOME}/.ssh && \
+    echo "------------------------------------------------------------------------------------" ;
+
+# Expose custom SSH port
+EXPOSE 22044
+
+# Start SSH daemon
+CMD ["/usr/sbin/sshd", "-D"]
