@@ -73,6 +73,7 @@ EOF
         -d \
         --restart=always \
         -p 22044:22044 \
+        -p 3124:3124 \
         \
         -e ARTIFACT_DIR="${C_HOME}/artifacts" \
         -v ${PWD}/artifacts:${C_HOME}/artifacts \
@@ -100,9 +101,3 @@ function main {
 }
 
 main
-
-        # \
-        # -e KUBECONFIG="${C_HOME}/artifacts/hub-kubeconfig" \
-        # -e KUBEADMIN_PASSWORD_FILE="${C_HOME}/shared_dir/kubeadmin-password" \
-        # -v ${hub_kc_path}:${C_HOME}/artifacts/hub-kubeconfig:ro \
-

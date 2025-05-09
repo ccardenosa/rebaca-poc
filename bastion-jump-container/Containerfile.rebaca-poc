@@ -85,10 +85,18 @@ RUN \
     chmod 700 ${HOME}/.ssh && \
     chmod 600 ${HOME}/.ssh/authorized_keys && \
     chown -R ${user}:${user} ${HOME}/.ssh && \
+    ssh-keygen -t ed25519 -N '' -f ${HOME}/.ssh/socks5-key && \
+    cat ${HOME}/.ssh/socks5-key.pub >> ${HOME}/.ssh/authorized_keys && \
+    echo "function run_proxy {" >> ${HOME}/.bashrc && \
+    echo "if [ \"\$(id -un)\" != \"root\" ]; then ssh -i ~/.ssh/socks5-key -p 22044 -D localhost:3124 -N -o StrictHostKeyChecking=no -4 localhost; fi" >> ${HOME}/.bashrc && \
+    echo "}" >> ${HOME}/.bashrc && \
+    echo "ss -puntal | grep ':3124 ' >/dev/null 2>&1 || run_proxy >/dev/null 2>&1 &" >> ${HOME}/.bashrc && \
     echo "------------------------------------------------------------------------------------" ;
 
 # Expose custom SSH port
 EXPOSE 22044
+# Expose Socks5 port
+EXPOSE 3124
 
 # Start SSH daemon
 CMD ["/usr/sbin/sshd", "-D"]
