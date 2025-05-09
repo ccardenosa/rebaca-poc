@@ -88,7 +88,7 @@ RUN \
     ssh-keygen -t ed25519 -N '' -f ${HOME}/.ssh/socks5-key && \
     cat ${HOME}/.ssh/socks5-key.pub >> ${HOME}/.ssh/authorized_keys && \
     echo "function run_proxy {" >> ${HOME}/.bashrc && \
-    echo "if [ \"\$(id -un)\" != \"root\" ]; then ssh -i ~/.ssh/socks5-key -p 22044 -D localhost:3124 -N -o StrictHostKeyChecking=no -4 localhost; fi" >> ${HOME}/.bashrc && \
+    echo "if [ \"\$(id -un)\" != \"root\" ]; then ssh -i ~/.ssh/socks5-key -p 22044 -D 0.0.0.0:3124 -N -o StrictHostKeyChecking=no -4 localhost; fi" >> ${HOME}/.bashrc && \
     echo "}" >> ${HOME}/.bashrc && \
     echo "ss -puntal | grep ':3124 ' >/dev/null 2>&1 || run_proxy >/dev/null 2>&1 &" >> ${HOME}/.bashrc && \
     echo "------------------------------------------------------------------------------------" ;
